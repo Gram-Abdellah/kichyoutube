@@ -5,6 +5,7 @@ import re
 from downloader import cut_and_watermark_kick_video
 from list_video_from_drive import list_videos_in_folder , delete_all_videos_in_folder_and_trash
 from post_on_youtube import get_drive_service, get_youtube_service, download_file_from_drive, upload_video_to_youtube
+from youtube_downloader import process_video
 
 TOKEN = os.getenv("BOT_TOKEN")
 URL = f"https://api.telegram.org/bot{TOKEN}/"
