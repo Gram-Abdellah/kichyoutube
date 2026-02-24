@@ -87,8 +87,23 @@ def handle_message(chat_id, text):
         user_data[chat_id] = {}
         send_message(chat_id, "📥 Please send the URL to scrape:")
         return
+    elif text == "/youtube_downloader":
+        user_states[chat_id] = "awaiting_youtube_url"
+        user_data[chat_id] = {}
+        send_message(chat_id, "📥 Please send the YOutube URL to downloader:")
+        return
+    if state == "awaiting_youtube_url":
+        if is_valid_url(text):
+            user_data[chat_id]["youtube_url"] = text
+            youtube_data = user_data[chat_id]
+            send_message(chat_id, "⏱️ Downloading starting now ...")
+            ytb_result = process_video("3", 1, youtube_data["youtube_url"])
+            print(ytb_result)
+            send_message(chat_id, ytb_result)
 
-    if state == "awaiting_url":
+        else:
+            send_message(chat_id, "❌ Invalid URL format.")
+    elif state == "awaiting_url":
         if is_valid_url(text):
             user_data[chat_id]["url"] = text
             user_states[chat_id] = "awaiting_start"
