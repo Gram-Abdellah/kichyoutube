@@ -5,160 +5,106 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# --- SHOW DATABASE ---
-SHOWS = {
-    "1": {
-        "name": "بنات لالة منانة الجزء 3 - رمضان 2026",
-        # تم تصحيح {ep} هنا لتتوافق مع الـ format بالأسفل
-        "title_template": "بنات لالة منانة الجزء 3 الحلقة {ep} رمضان 2026",
-        "description": """العودة المنتظرة! 💙 بعد غياب 12 سنة، "بنات لالة منانة" كيرجعوا لمدينة شفشاون الساحرة.. لكن هاد المرة الصراعات والمفاجآت غادية تكون أقوى من قبل! 🔥⚡️
-لا تفوتوا موعد اللقاء مع منانة وبناتها.
-📌 يومياً في رمضان
-⏰ على الساعة 18:40
-📺 على قناة 2M""",
-        "keywords": "بنات لالة منانة الجزء الثالث, مسلسلات رمضان 2026 المغربية, جديد دراما رمضان على 2M, قصة بنات لالة منانة في شفشاون, أبطال مسلسل بنات لالة منانة, موعد عرض مسلسل بنات لالة منانة, الدراما المغربية 2026",
-        "thumb_folder": "thumbnails/bnatlalamenan"
-    },
-    "2": {
-        "name": "مسلسل كريمة و بناتها - Karima d Istis",
-        "title_template": "Karima d Istis - Episode {ep} | مسلسل كريمة و بناتها - الحلقة {ep} | ⴽⴰⵔⵉⵎⴰ ⴷ ⵉⵙⵜⵉⵙ",
-        "description": """دراما اجتماعية أمازيغية بامتياز! ♓️✨ 
-شاهدوا مسلسل "كريمة و بناتها" (Karima d Istis)، العمل الذي يغوص في عمق المجتمع الأمازيغي ليعكس صراعات يومية وقيم إنسانية خالدة. 
-بين عبق الهوية وتحديات العصر، تنقلنا كريمة في رحلة درامية مشوقة عبر قناة تمازيغت.
+# ----------------------------
+# CONFIG
+# ----------------------------
 
-🔹 القصة: صراعات، تحديات، وأمل يتجدد في قلب الهوية الأمازيغية.
-📌 يومياً خلال شهر رمضان المبارك.
-🔔 لا تنسوا الاشتراك في القناة وتفعيل الجرس ليصلكم كل جديد!""",
-        "keywords": "كريمة وبناتها, Karima d Istis, ⴽⴰⵔⵉⵎⴰ ⴷ ⵉⵙⵜⵉⵙ, مسلسل أمازيغي 2026, قناة تمازيغت, دراما أمازيغية, رمضان 2026 المغرب, مسلسلات تمازيغت, الثقافة الأمازيغية, Tamazight TV, Drama Amazigh",
-        "thumb_folder": "thumbnails/karima_istis"
-    },
-    "3": {
-        "name": "حكايات شامة - Hikayat Chama",
-        "title_template": "حكايات شامة - الحلقة {ep} | Hikayat Chama - Episode {ep}",
-        "description": """حين تصبح "الحكاية" هي السلاح الوحيد لمواجهة قسوة الواقع.. 📖✨
-نعيش مع "شامة" رحلة استثنائية تستحضر فيها سحر الموروث الثقافي المغربي والحكايات الشعبية لتنتصر على الظلم. 🔥⚡️
-دراما مشوقة تمزج بين الأصالة والواقع في قالب فني فريد يعيد الاعتبار للتراث الشفهي المغربي.
+VIDEO_URL = "https://www.youtube.com/watch?v=Vagvdxs-pIc"
+DOWNLOAD_FILE = "temp_video.mp4"
 
-📌 موعدكم يومياً في رمضان
-⏰ على الساعة 19:25 (07:25 مساءً)
-🔔 اشتركوا الآن وفعلوا الجرس لمتابعة حلقات "حكايات شامة" أولاً بأول!""",
-        "keywords": "حكايات شامة, Hikayat Chama, مسلسلات رمضان 2026 المغربية, الحكاية الشعبية المغربية, التراث المغربي, دراما مغربية, شامة رمضان 2026, الموروث الثقافي, حكايات مغربية قديمة",
-        "thumb_folder": "thumbnails/hikayat_chama"
-    },
-    "4": {
-        "name": "مسلسل عش الطمع - Aach Tmaa",
-        "title_template": "Aach Tmaa - Episode {} | مسلسل عش الطمع - الحلقة {} | أخطر قضية اجتماعية: الإتجار في الرضع",
-        "description": """الصدمة.. حين يتحول "عش الطمع" إلى جحيم يتاجر بالبراءة! 🔥👶
-شاهدوا الحلقة {} من مسلسل "عش الطمع"، الدراما الاجتماعية الأكثر جرأة في رمضان 2026. 
+TITLE = "Reupload - My Own Content"
+DESCRIPTION = "Reuploaded from my official channel."
+TAGS = ["my content", "official"]
+CATEGORY_ID = "22"
+PRIVACY = "private"
 
-تجمع الحكايات نساءً من خلفيات مختلفة، لكن المصير واحد في مواجهة أخطر القضايا الاجتماعية: الإتجار في الرضع. كيف ستقودهم الأقدار داخل "عش الطمع"؟ 🏚️⚡️
+# ----------------------------
+# AUTH
+# ----------------------------
 
-📌 موعد العرض: يومياً في رمضان 🌙
-⏰ التوقيت: على الساعة 19:30 مساءً
-📺 القناة: الأولى (Al Aoula)
+def get_youtube_service():
 
-⚠️ المسلسل يسلط الضوء على واقع مرير وقضايا إنسانية حساسة.
-🔔 اشترك الآن وفعل الجرس لمتابعة أقوى المسلسلات المغربية لرمضان 2026!""",
-        "keywords": "عش الطمع, Aach Tmaa, مسلسل عش الطمع الحلقة 1, الإتجار في الرضع, قضايا اجتماعية مغربية, مسلسلات رمضان 2026 المغربية, قناة الأولى المغربية, Al Aoula TV, بيع الرضع, دراما مغربية واقعية, جديد مسلسلات رمضان المغرب, مسلسل مغربي 2026",
-        "thumb_folder": "thumbnails/aach_tmaa_ep1"
-    },
-    "5": {
-        "name": "مسلسل شكون كان يقول - Chkoune Kane Igoul",
-        "title_template": "Chkoune Kane Igoul - Episode {} | مسلسل شكون كان يقول - الحلقة {} | أسرار وصدمات غير متوقعة",
-        "description": """شكون كان يقول بلي الحياة تقدر تتبدل في رمشة عين؟ 😱✨ 
-شاهدوا الحلقة {} من مسلسل "شكون كان يقول"، العمل الدرامي الذي يغوص في أعماق النفس البشرية ويكشف المستور.
+    with open("token2.json", "r") as f:
+        creds = Credentials.from_authorized_user_info(json.load(f))
 
-بين الماضي والحاضر، تنكشف حقائق مدفونة وأقنعة لم نكن نتخيلها. هل أنتم مستعدون لرحلة من الغموض والتشويق التي ستغير كل توقعاتكم؟ 🕵️‍♂️🔥
+    return build("youtube", "v3", credentials=creds)
 
-📌 موعدكم يومياً في رمضان 🌙
-⏰ التوقيت: على الساعة 20:30 مساءً (بعد صلاة التراويح)
-📺 القناة: الأولى (Al Aoula)
+# ----------------------------
+# DOWNLOAD (FROM YOUR CHANNEL)
+# ----------------------------
 
-🔔 اشترك الآن وفعل الجرس لمتابعة أقوى لحظات "شكون كان يقول" طيلة شهر رمضان المبارك!""",
-        "keywords": "شكون كان يقول, Chkoune Kane Igoul, مسلسل شكون كان يقول الحلقة 1, دراما مغربية 2026, مسلسلات رمضان 2026 المغربية, قناة الأولى المغربية, Al Aoula TV, غموض وتشويق مغربي, جديد الدراما المغربية, أسرار وحقائق, رمضان 2026 المغرب",
-        "thumb_folder": "thumbnails/chkoune_kane_igoul_ep1"
-    }
-}
+def download_video(url):
+    print("📥 Downloading video...")
 
-
-def get_service(api_name, api_version):
-    token_json = os.getenv('GOOGLE_TOKEN')
-    if token_json:
-        creds = Credentials.from_authorized_user_info(json.loads(token_json))
-    else:
-        # تأكد أن ملف token.json موجود في نفس المجلد عند التجربة المحلية
-        with open('token.json', 'r') as f:
-            creds = Credentials.from_authorized_user_info(json.load(f))
-    return build(api_name, api_version, credentials=creds)
-
-def process_video(show_id, ep_num, video_url):
-    show = SHOWS.get(show_id)
-    if not show:
-        return "❌ Show ID not found."
-
-    # تجهيز النصوص
-    final_title = show["title_template"].format(ep=ep_num)
-    
-    # تأكد من امتداد الصورة (png أو jpg)
-    final_thumb = f"{show['thumb_folder']}/{ep_num}.png" 
-    
-    # استخدام اسم ملف بسيط لتجنب مشاكل اللغة العربية في المسارات
-    video_file = "temp_video.mp4"
-
-    # 1. تحميل الفيديو
-    print(f"📥 Downloading {final_title}...")
     ydl_opts = {
-        'outtmpl': video_file, 
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        "outtmpl": DOWNLOAD_FILE,
+        "format": "bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
+        # Required if private/unlisted
+        "cookies": "cookies.txt" if os.path.exists("cookies.txt") else None
     }
+
+    # Remove None values
+    ydl_opts = {k: v for k, v in ydl_opts.items() if v is not None}
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
+        ydl.download([url])
 
-    # 2. الرفع إلى Google Drive
-    #print(f"☁️ Uploading to Drive...")
-    #drive_service = get_service('drive', 'v3')
-    #drive_meta = {'name': f"{final_title}.mp4"}
-    #media_drive = MediaFileUpload(video_file, mimetype='video/mp4', resumable=True)
-    #drive_file = drive_service.files().create(body=drive_meta, media_body=media_drive).execute()
-    #print(f"✅ Drive Upload Done: {drive_file.get('id')}")
+    print("✅ Download complete")
 
-    # 3. الرفع إلى YouTube
-    '''
-    print(f"📺 Uploading to YouTube...")
-    yt_service = get_service('youtube', 'v3')
-    yt_body = {
-        'snippet': {
-            'title': final_title,
-            'description': show['description'],
-            'tags': [t.strip() for t in show['keywords'].split(',')],
-            'categoryId': '22'
+# ----------------------------
+# UPLOAD (TO SECOND CHANNEL)
+# ----------------------------
+
+def upload_video():
+    print("📺 Uploading to second channel...")
+
+    youtube = get_youtube_service()
+
+    body = {
+        "snippet": {
+            "title": TITLE,
+            "description": DESCRIPTION,
+            "tags": TAGS,
+            "categoryId": CATEGORY_ID
         },
-        'status': {'privacyStatus': 'private'}
+        "status": {
+            "privacyStatus": PRIVACY
+        }
     }
-    
-    media_yt = MediaFileUpload(video_file, chunksize=-1, resumable=True)
-    insert_req = yt_service.videos().insert(
-        part='snippet,status',
-        body=yt_body,
-        media_body=media_yt
+
+    media = MediaFileUpload(
+        DOWNLOAD_FILE,
+        mimetype="video/mp4",
+        resumable=True
     )
-    yt_res = insert_req.execute()
-    video_id = yt_res['id']
-    print(f"✅ YouTube Upload Done: {video_id}")
 
-    # 4. رفع الصورة المصغرة (Thumbnail)
-    if os.path.exists(final_thumb):
-        yt_service.thumbnails().set(
-            videoId=video_id,
-            media_body=MediaFileUpload(final_thumb)
-        ).execute()
-        print("✅ Thumbnail Uploaded.")
-    else:
-        print(f"⚠️ Thumbnail not found at: {final_thumb}")
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media
+    )
 
-    # تنظيف: حذف الملف المؤقت بعد الرفع
-    if os.path.exists(video_file):
-        os.remove(video_file)
-    
-    return f"Done! {final_title} is live (private)."
-'''
+    response = request.execute()
+    video_id = response["id"]
+
+    print(f"✅ Uploaded successfully: {video_id}")
+
+    return video_id
+
+# ----------------------------
+# MAIN
+# ----------------------------
+
+def process_upload(VIDEO_URL):
+    try:
+        download_video(VIDEO_URL)
+        upload_video()
+
+        if os.path.exists(DOWNLOAD_FILE):
+            os.remove(DOWNLOAD_FILE)
+
+        print("🎉 Process completed successfully.")
+
+    except Exception as e:
+        print("❌ Error:", e)
