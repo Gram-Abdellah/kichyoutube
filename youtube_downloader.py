@@ -43,7 +43,6 @@ def download_video(url):
         "format": "bestvideo+bestaudio/best",
         "merge_output_format": "mp4",
         "cookiefile": "cookies.txt",
-        "js_runtimes": ["deno"],
         "quiet": False
     }
 
