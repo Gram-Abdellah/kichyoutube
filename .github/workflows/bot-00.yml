@@ -13,13 +13,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
+      # 🔥 Install Deno (Required for YouTube JS extraction)
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
 
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y ffmpeg
           pip install -r requirements.txt
+
+      # 🔥 Create cookies file from GitHub Secret
+      - name: Create cookies file
+        run: echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
 
       - name: Run bot
         env:

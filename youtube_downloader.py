@@ -35,16 +35,17 @@ def get_youtube_service():
 def download_video(url):
     print("📥 Downloading video...")
 
+    if not os.path.exists("cookies.txt"):
+        raise Exception("cookies.txt not found!")
+
     ydl_opts = {
         "outtmpl": DOWNLOAD_FILE,
         "format": "bestvideo+bestaudio/best",
         "merge_output_format": "mp4",
-        # Required if private/unlisted
-        "cookiefile": "cookies.txt" if os.path.exists("cookies.txt") else None
+        "cookiefile": "cookies.txt",
+        "js_runtimes": ["deno"],
+        "quiet": False
     }
-
-    # Remove None values
-    ydl_opts = {k: v for k, v in ydl_opts.items() if v is not None}
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
