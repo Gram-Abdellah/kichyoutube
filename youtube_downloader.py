@@ -9,7 +9,6 @@ from googleapiclient.http import MediaFileUpload
 # CONFIG
 # ----------------------------
 
-VIDEO_URL = "https://www.youtube.com/watch?v=Vagvdxs-pIc"
 DOWNLOAD_FILE = "temp_video.mp4"
 
 TITLE = "Reupload - My Own Content"
