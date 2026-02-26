@@ -20,13 +20,16 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
-
+      
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y ffmpeg
           pip install -r requirements.txt
-
+      
+      - name: Upgrade yt-dlp
+        run: pip install -U yt-dlp
+      
       # 🔥 Create cookies file from GitHub Secret
       - name: Create cookies file
         run: echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
