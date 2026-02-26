@@ -103,7 +103,7 @@ def process_upload(VIDEO_URL):
         if os.path.exists(DOWNLOAD_FILE):
             os.remove(DOWNLOAD_FILE)
 
-        print("🎉 Process completed successfully.")
+        return "🎉 Process completed successfully."
 
     except Exception as e:
-        print("❌ Error:", e)
+        return ("❌ Error:", e)

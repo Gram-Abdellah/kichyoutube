@@ -98,8 +98,8 @@ def handle_message(chat_id, text):
             user_data[chat_id]["youtube_url"] = text
             youtube_data = user_data[chat_id]
             send_message(chat_id, "⏱️ Downloading starting now ...")
-            process_upload(youtube_data['youtube_url'])
-            send_message(chat_id, "✅ Uploaded successfully: ID")
+            process_upload_rslt = process_upload(youtube_data['youtube_url'])
+            send_message(chat_id, process_upload_rslt)
         else:
             send_message(chat_id, "❌ Invalid URL format.")
 
