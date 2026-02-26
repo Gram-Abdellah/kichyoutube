@@ -40,7 +40,7 @@ def download_video(url):
         "format": "bestvideo+bestaudio/best",
         "merge_output_format": "mp4",
         # Required if private/unlisted
-        "cookies": "cookies.txt" if os.path.exists("cookies.txt") else None
+        "cookiefile": "cookies.txt" if os.path.exists("cookies.txt") else None
     }
 
     # Remove None values
