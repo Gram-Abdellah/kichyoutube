@@ -2,6 +2,7 @@ import subprocess
 import os
 import re
 import requests
+from urllib.parse import urljoin
 from datetime import datetime, timedelta
 from upload_to_drive import upload_to_drive
 
@@ -31,17 +32,54 @@ def seconds_to_hms(seconds):
     return str(timedelta(seconds=seconds))
 
 
-def parse_m3u8_segments(m3u8_url, headers):
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+    'Referer': 'https://kick.com/',
+    'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain',
+    'Origin': 'https://kick.com',
+}
+
+
+def parse_m3u8_segments(m3u8_url):
     """Fetch and parse m3u8 playlist, return segments with timing info."""
-    resp = requests.get(m3u8_url, headers=headers, timeout=30)
+    print(f"📋 Fetching playlist: {m3u8_url}")
+    resp = requests.get(m3u8_url, headers=HEADERS, timeout=30)
     resp.raise_for_status()
     playlist = resp.text
 
-    base_url = m3u8_url.rsplit('/', 1)[0] + '/'
+    # Debug: show first few lines
+    lines = playlist.strip().split('\n')
+    print(f"   Playlist has {len(lines)} lines")
+    print(f"   First 5 lines:")
+    for l in lines[:5]:
+        print(f"     {l.strip()[:120]}")
 
+    # Check if this is a master playlist (has stream variants)
+    if '#EXT-X-STREAM-INF' in playlist:
+        print("   ⚠️ This is a master playlist, finding best quality...")
+        best_url = None
+        best_bandwidth = 0
+        for i, line in enumerate(lines):
+            if '#EXT-X-STREAM-INF' in line:
+                bw_match = re.search(r'BANDWIDTH=(\d+)', line)
+                bandwidth = int(bw_match.group(1)) if bw_match else 0
+                # Next non-empty, non-comment line is the URL
+                for j in range(i + 1, len(lines)):
+                    candidate = lines[j].strip()
+                    if candidate and not candidate.startswith('#'):
+                        if bandwidth > best_bandwidth:
+                            best_bandwidth = bandwidth
+                            best_url = candidate
+                        break
+        if best_url:
+            if not best_url.startswith('http'):
+                best_url = urljoin(m3u8_url, best_url)
+            print(f"   Using variant: {best_url}")
+            return parse_m3u8_segments(best_url)
+
+    # Parse media playlist segments
     segments = []
     current_time = 0.0
-    lines = playlist.strip().split('\n')
 
     i = 0
     while i < len(lines):
@@ -56,8 +94,9 @@ def parse_m3u8_segments(m3u8_url, headers):
                     seg_line = lines[j].strip()
                     if seg_line and not seg_line.startswith('#'):
                         seg_url = seg_line
+                        # Resolve relative URLs properly
                         if not seg_url.startswith('http'):
-                            seg_url = base_url + seg_url
+                            seg_url = urljoin(m3u8_url, seg_url)
                         segments.append({
                             'url': seg_url,
                             'duration': duration,
@@ -70,30 +109,50 @@ def parse_m3u8_segments(m3u8_url, headers):
                     j += 1
         i += 1
 
+    # Debug: show first segment URL
+    if segments:
+        print(f"   First segment URL: {segments[0]['url'][:120]}")
+        print(f"   Last segment URL:  {segments[-1]['url'][:120]}")
+
     return segments
 
 
-def download_needed_segments(segments, start_sec, end_sec, output_path, headers):
+def download_needed_segments(segments, start_sec, end_sec, output_path):
     """Download only segments that overlap with the requested time range."""
     needed = [s for s in segments if s['end'] > start_sec and s['start'] < end_sec]
 
     if not needed:
         print(f"❌ No segments found for {start_sec}s - {end_sec}s")
+        print(f"   Total playlist duration: {segments[-1]['end']:.1f}s")
         return False, 0, 0
 
     print(f"📦 Need {len(needed)} segments ({needed[0]['start']:.1f}s to {needed[-1]['end']:.1f}s)")
 
+    # Use session for connection reuse
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
     with open(output_path, 'wb') as f:
         for i, seg in enumerate(needed):
             try:
-                resp = requests.get(seg['url'], headers=headers, timeout=30)
+                resp = session.get(seg['url'], timeout=30, allow_redirects=True)
                 resp.raise_for_status()
                 f.write(resp.content)
                 if (i + 1) % 3 == 0 or (i + 1) == len(needed):
                     print(f"  📥 Downloaded {i+1}/{len(needed)} segments")
             except requests.RequestException as e:
-                print(f"  ⚠️ Segment {i+1} failed: {e}, skipping...")
-                continue
+                print(f"  ⚠️ Segment {i+1} failed: {e}")
+                # Retry once
+                try:
+                    print(f"  🔄 Retrying segment {i+1}...")
+                    resp = requests.get(seg['url'], headers=HEADERS, timeout=30, allow_redirects=True)
+                    resp.raise_for_status()
+                    f.write(resp.content)
+                except requests.RequestException as e2:
+                    print(f"  ❌ Retry failed: {e2}, skipping...")
+                    continue
+
+    session.close()
 
     # How much to trim from the start of first segment
     trim_start = start_sec - needed[0]['start']
@@ -108,11 +167,6 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
     raw_video = f"raw_kick_clip_{timestamp}.mp4"
     final_video = f"{streamer_name}_kick_clip_{timestamp}.mp4"
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Referer': 'https://kick.com/'
-    }
-
     start_sec = hms_to_seconds(start_time)
     end_sec = hms_to_seconds(end_time)
 
@@ -121,7 +175,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
     # =========================================================
     print(f"📋 Step 1: Parsing m3u8 playlist...")
     try:
-        segments = parse_m3u8_segments(m3u8_url, headers)
+        segments = parse_m3u8_segments(m3u8_url)
         if not segments:
             print("❌ No segments found in playlist!")
             return
@@ -129,11 +183,17 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         print(f"   Found {len(segments)} segments ({total_duration:.1f}s total)")
     except Exception as e:
         print(f"❌ Failed to parse m3u8: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+
+    if start_sec > segments[-1]['end']:
+        print(f"❌ Start time {start_time} ({start_sec}s) is beyond the stream end ({segments[-1]['end']:.1f}s)")
         return
 
     print(f"📥 Downloading segments for {start_time} → {end_time}...")
     success, trim_start, clip_duration = download_needed_segments(
-        segments, start_sec, end_sec, temp_ts, headers
+        segments, start_sec, end_sec, temp_ts
     )
 
     if not success:
@@ -171,13 +231,18 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
 
     print(f"🔧 Step 1.5: Converting to MP4 (trim {trim_start:.1f}s, duration {clip_duration:.1f}s)...")
     try:
-        result = subprocess.run(convert_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = subprocess.run(convert_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         output = result.stdout.decode()
         if result.returncode != 0:
-            print(f"❌ Conversion failed:\n{output[-1000:]}")
+            print(f"❌ Conversion failed:\n{output[-2000:]}")
             if os.path.exists(temp_ts):
                 os.remove(temp_ts)
             return
+    except subprocess.TimeoutExpired:
+        print("❌ Conversion timed out!")
+        if os.path.exists(temp_ts):
+            os.remove(temp_ts)
+        return
     except Exception as e:
         print(f"❌ Conversion exception: {e}")
         if os.path.exists(temp_ts):
@@ -251,12 +316,12 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         result = subprocess.run(watermark_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         output = result.stdout.decode()
         if result.returncode != 0:
-            print("❌ FFmpeg watermark failed:\n", output[-1000:])
+            print("❌ FFmpeg watermark failed:\n", output[-2000:])
             if os.path.exists(raw_video):
                 os.remove(raw_video)
             return
     except subprocess.TimeoutExpired:
-        print("❌ Watermark timed out after 10 minutes!")
+        print("❌ Watermark timed out!")
         if os.path.exists(raw_video):
             os.remove(raw_video)
         return
