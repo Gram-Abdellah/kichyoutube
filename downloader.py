@@ -448,27 +448,19 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         # =========================================================
         # Step 2: Add watermark and scrolling text
         # =========================================================
-        # Dynamic watermark settings
+        # Dynamic watermark settings — ALWAYS keep 1080p
         if clip_duration_sec <= 300:
-            wm_scale = None
-            wm_preset = "ultrafast"
-            wm_crf = "23"
             wm_timeout = 600
         elif clip_duration_sec <= 1800:
-            wm_scale = "scale=1280:720"
-            wm_preset = "ultrafast"
-            wm_crf = "26"
             wm_timeout = 1800
         elif clip_duration_sec <= 7200:
-            wm_scale = "scale=1280:720"
-            wm_preset = "ultrafast"
-            wm_crf = "28"
             wm_timeout = 3600
         else:
-            wm_scale = "scale=854:480"
-            wm_preset = "ultrafast"
-            wm_crf = "30"
             wm_timeout = 7200
+
+        wm_scale = None          # Never downscale
+        wm_preset = "ultrafast"
+        wm_crf = "18"            # High quality (lower = better, 18 is visually lossless)
 
         print(f"🖼️ Step 2: Watermark (timeout={wm_timeout}s)...")
 
