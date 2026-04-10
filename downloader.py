@@ -36,16 +36,25 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
     duration = seconds_to_hms(duration_seconds)
 
     # Step 1: Download and re-encode the clip
+    # Step 1: Download and copy the clip (no re-encode needed, Step 2 handles that)
     cut_cmd = [
         "ffmpeg",
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "-referer", "https://kick.com/",
-        "-i", m3u8_url,
+        "-multiple_requests", "0",
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
         "-ss", start_time,
+        "-i", m3u8_url,
         "-t", duration,
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-preset", "ultrafast",
+        "-map", "0:v:0",
+        "-map", "0:a:0",
+        "-ignore_unknown",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-bsf:a", "aac_adtstoasc",
+        "-y",
         raw_video
     ]
 
