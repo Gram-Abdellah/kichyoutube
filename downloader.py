@@ -1,7 +1,10 @@
 import subprocess
 import os
+import re
+import requests
 from datetime import datetime, timedelta
 from upload_to_drive import upload_to_drive
+
 
 def get_overlay_position(position):
     positions = {
@@ -14,121 +17,176 @@ def get_overlay_position(position):
     }
     return positions.get(position, "W-w-10:H-h-10")
 
+
 def escape_text_for_drawtext(text):
     return text.replace(":", r'\:').replace("'", r"\\'")
+
 
 def hms_to_seconds(hms):
     h, m, s = map(int, hms.split(":"))
     return h * 3600 + m * 60 + s
 
+
 def seconds_to_hms(seconds):
     return str(timedelta(seconds=seconds))
 
+
+def parse_m3u8_segments(m3u8_url, headers):
+    """Fetch and parse m3u8 playlist, return segments with timing info."""
+    resp = requests.get(m3u8_url, headers=headers, timeout=30)
+    resp.raise_for_status()
+    playlist = resp.text
+
+    base_url = m3u8_url.rsplit('/', 1)[0] + '/'
+
+    segments = []
+    current_time = 0.0
+    lines = playlist.strip().split('\n')
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith('#EXTINF:'):
+            match = re.search(r'#EXTINF:([\d.]+)', line)
+            if match:
+                duration = float(match.group(1))
+                # Find the segment URL (next non-comment, non-empty line)
+                j = i + 1
+                while j < len(lines):
+                    seg_line = lines[j].strip()
+                    if seg_line and not seg_line.startswith('#'):
+                        seg_url = seg_line
+                        if not seg_url.startswith('http'):
+                            seg_url = base_url + seg_url
+                        segments.append({
+                            'url': seg_url,
+                            'duration': duration,
+                            'start': current_time,
+                            'end': current_time + duration,
+                        })
+                        current_time += duration
+                        i = j
+                        break
+                    j += 1
+        i += 1
+
+    return segments
+
+
+def download_needed_segments(segments, start_sec, end_sec, output_path, headers):
+    """Download only segments that overlap with the requested time range."""
+    needed = [s for s in segments if s['end'] > start_sec and s['start'] < end_sec]
+
+    if not needed:
+        print(f"❌ No segments found for {start_sec}s - {end_sec}s")
+        return False, 0, 0
+
+    print(f"📦 Need {len(needed)} segments ({needed[0]['start']:.1f}s to {needed[-1]['end']:.1f}s)")
+
+    with open(output_path, 'wb') as f:
+        for i, seg in enumerate(needed):
+            try:
+                resp = requests.get(seg['url'], headers=headers, timeout=30)
+                resp.raise_for_status()
+                f.write(resp.content)
+                if (i + 1) % 3 == 0 or (i + 1) == len(needed):
+                    print(f"  📥 Downloaded {i+1}/{len(needed)} segments")
+            except requests.RequestException as e:
+                print(f"  ⚠️ Segment {i+1} failed: {e}, skipping...")
+                continue
+
+    # How much to trim from the start of first segment
+    trim_start = start_sec - needed[0]['start']
+    clip_duration = end_sec - start_sec
+
+    return True, trim_start, clip_duration
+
+
 def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo.png", streamer_name="MoroccanStreamer123", font_path=""):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_raw = f"temp_raw_{timestamp}.mkv"
+    temp_ts = f"temp_segments_{timestamp}.ts"
     raw_video = f"raw_kick_clip_{timestamp}.mp4"
     final_video = f"{streamer_name}_kick_clip_{timestamp}.mp4"
 
-    # Calculate duration
-    start_seconds = hms_to_seconds(start_time)
-    end_seconds = hms_to_seconds(end_time)
-    duration_seconds = max(0, end_seconds - start_seconds)
-    duration = seconds_to_hms(duration_seconds)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Referer': 'https://kick.com/'
+    }
+
+    start_sec = hms_to_seconds(start_time)
+    end_sec = hms_to_seconds(end_time)
 
     # =========================================================
-    # Step 1: Download raw clip to MKV (pure copy, no decoding)
+    # Step 1: Parse m3u8 and download only needed segments
     # =========================================================
-    download_cmd = [
-        "ffmpeg",
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "-referer", "https://kick.com/",
-        "-multiple_requests", "0",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "5",
-        "-i", m3u8_url,
-        "-ss", start_time,
-        "-t", duration,
-        "-map", "0:v:0",
-        "-map", "0:a:0",
-        "-ignore_unknown",
-        "-c:v", "copy",
-        "-c:a", "copy",
-        "-avoid_negative_ts", "make_zero",
-        "-fflags", "+genpts+discardcorrupt",
-        "-y",
-        temp_raw
-    ]
-
-    print(f"🎬 Step 1: Downloading raw clip to: {temp_raw}")
+    print(f"📋 Step 1: Parsing m3u8 playlist...")
     try:
-        subprocess.run(download_cmd, check=True)
-    except subprocess.CalledProcessError:
-        print("❌ Failed to download video. Check FFmpeg or m3u8 link.")
+        segments = parse_m3u8_segments(m3u8_url, headers)
+        if not segments:
+            print("❌ No segments found in playlist!")
+            return
+        total_duration = segments[-1]['end']
+        print(f"   Found {len(segments)} segments ({total_duration:.1f}s total)")
+    except Exception as e:
+        print(f"❌ Failed to parse m3u8: {e}")
         return
 
-    if not os.path.exists(temp_raw) or os.path.getsize(temp_raw) == 0:
-        print("❌ Downloaded file is empty or missing!")
+    print(f"📥 Downloading segments for {start_time} → {end_time}...")
+    success, trim_start, clip_duration = download_needed_segments(
+        segments, start_sec, end_sec, temp_ts, headers
+    )
+
+    if not success:
         return
 
-    size_mb = os.path.getsize(temp_raw) / (1024 * 1024)
-    print(f"✅ Downloaded raw clip: {temp_raw} ({size_mb:.2f} MB)")
+    if not os.path.exists(temp_ts) or os.path.getsize(temp_ts) == 0:
+        print("❌ Downloaded segment file is empty!")
+        return
+
+    size_mb = os.path.getsize(temp_ts) / (1024 * 1024)
+    print(f"✅ Downloaded: {temp_ts} ({size_mb:.2f} MB)")
 
     # =========================================================
-    # Step 1.5: Convert MKV to clean MP4 (re-encode audio only)
+    # Step 1.5: Convert local .ts to clean .mp4
     # =========================================================
-    fix_cmd = [
+    convert_cmd = [
         "ffmpeg",
         "-y",
         "-err_detect", "ignore_err",
-        "-i", temp_raw,
-        "-c:v", "copy",
+        "-fflags", "+genpts+discardcorrupt",
+        "-i", temp_ts,
+        "-ss", str(trim_start),
+        "-t", str(clip_duration),
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
         "-c:a", "aac",
         "-ac", "2",
         "-ar", "48000",
         "-b:a", "128k",
-        "-af", "aresample=async=1000:first_pts=0",
-        "-fflags", "+genpts",
         "-avoid_negative_ts", "make_zero",
         "-max_muxing_queue_size", "4096",
         "-movflags", "+faststart",
         raw_video
     ]
 
-    print(f"🔧 Step 1.5: Converting to clean MP4: {temp_raw} → {raw_video}")
+    print(f"🔧 Step 1.5: Converting to MP4 (trim {trim_start:.1f}s, duration {clip_duration:.1f}s)...")
     try:
-        result = subprocess.run(fix_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = subprocess.run(convert_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         output = result.stdout.decode()
         if result.returncode != 0:
-            print(f"⚠️ Audio re-encode had issues, trying fallback...")
-            # Fallback: copy everything into MP4
-            fallback_cmd = [
-                "ffmpeg",
-                "-y",
-                "-err_detect", "ignore_err",
-                "-i", temp_raw,
-                "-c:v", "copy",
-                "-c:a", "copy",
-                "-movflags", "+faststart",
-                raw_video
-            ]
-            try:
-                subprocess.run(fallback_cmd, check=True)
-            except subprocess.CalledProcessError:
-                print("❌ All conversion methods failed.")
-                if os.path.exists(temp_raw):
-                    os.remove(temp_raw)
-                return
+            print(f"❌ Conversion failed:\n{output[-1000:]}")
+            if os.path.exists(temp_ts):
+                os.remove(temp_ts)
+            return
     except Exception as e:
         print(f"❌ Conversion exception: {e}")
-        if os.path.exists(temp_raw):
-            os.remove(temp_raw)
+        if os.path.exists(temp_ts):
+            os.remove(temp_ts)
         return
 
-    # Clean up temp mkv file
-    if os.path.exists(temp_raw):
-        os.remove(temp_raw)
+    # Clean up temp .ts
+    if os.path.exists(temp_ts):
+        os.remove(temp_ts)
 
     if not os.path.exists(raw_video) or os.path.getsize(raw_video) == 0:
         print("❌ Raw video was not created or is empty!")
@@ -193,12 +251,12 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         result = subprocess.run(watermark_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         output = result.stdout.decode()
         if result.returncode != 0:
-            print("❌ FFmpeg watermark failed:\n", output)
+            print("❌ FFmpeg watermark failed:\n", output[-1000:])
             if os.path.exists(raw_video):
                 os.remove(raw_video)
             return
     except subprocess.TimeoutExpired:
-        print("❌ FFmpeg watermark timed out after 10 minutes!")
+        print("❌ Watermark timed out after 10 minutes!")
         if os.path.exists(raw_video):
             os.remove(raw_video)
         return
@@ -230,7 +288,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         # =========================================================
         # Step 4: Clean up ALL local files
         # =========================================================
-        for f in [raw_video, final_video, temp_raw]:
+        for f in [raw_video, final_video, temp_ts]:
             if os.path.exists(f):
                 os.remove(f)
         print("🧹 Cleaned up local files.")
