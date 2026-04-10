@@ -45,8 +45,8 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "5",
-        "-ss", start_time,
-        "-i", m3u8_url,
+        "-i", m3u8_url,               # Input FIRST
+        "-ss", start_time,            # Seek AFTER input
         "-t", duration,
         "-map", "0:v:0",
         "-map", "0:a:0",
@@ -54,6 +54,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         "-c:v", "copy",
         "-c:a", "copy",
         "-bsf:a", "aac_adtstoasc",
+        "-avoid_negative_ts", "make_zero",   # Fix timestamp issues
         "-y",
         raw_video
     ]
