@@ -26,7 +26,7 @@ def seconds_to_hms(seconds):
 
 def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo.png", streamer_name="MoroccanStreamer123", font_path=""):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_raw = f"temp_raw_{timestamp}.ts"
+    temp_raw = f"temp_raw_{timestamp}.mkv"
     raw_video = f"raw_kick_clip_{timestamp}.mp4"
     final_video = f"{streamer_name}_kick_clip_{timestamp}.mp4"
 
@@ -37,7 +37,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
     duration = seconds_to_hms(duration_seconds)
 
     # =========================================================
-    # Step 1: Download raw clip (pure copy, no decoding at all)
+    # Step 1: Download raw clip to MKV (pure copy, no decoding)
     # =========================================================
     download_cmd = [
         "ffmpeg",
@@ -53,8 +53,10 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         "-map", "0:v:0",
         "-map", "0:a:0",
         "-ignore_unknown",
-        "-c", "copy",
-        "-copyts",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-fflags", "+genpts+discardcorrupt",
         "-y",
         temp_raw
     ]
@@ -74,46 +76,57 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
     print(f"✅ Downloaded raw clip: {temp_raw} ({size_mb:.2f} MB)")
 
     # =========================================================
-    # Step 1.5: Fix timestamps and convert to mp4
+    # Step 1.5: Convert MKV to clean MP4 (re-encode audio only)
     # =========================================================
     fix_cmd = [
         "ffmpeg",
         "-y",
+        "-err_detect", "ignore_err",
         "-i", temp_raw,
         "-c:v", "copy",
         "-c:a", "aac",
         "-ac", "2",
         "-ar", "48000",
-        "-af", "aresample=async=1",
+        "-b:a", "128k",
+        "-af", "aresample=async=1000:first_pts=0",
         "-fflags", "+genpts",
         "-avoid_negative_ts", "make_zero",
-        "-max_muxing_queue_size", "2048",
+        "-max_muxing_queue_size", "4096",
+        "-movflags", "+faststart",
         raw_video
     ]
 
-    print(f"🔧 Step 1.5: Fixing timestamps: {temp_raw} → {raw_video}")
+    print(f"🔧 Step 1.5: Converting to clean MP4: {temp_raw} → {raw_video}")
     try:
-        subprocess.run(fix_cmd, check=True)
-    except subprocess.CalledProcessError:
-        print("⚠️ Audio re-encode failed, trying pure copy fallback...")
-        fallback_cmd = [
-            "ffmpeg",
-            "-y",
-            "-i", temp_raw,
-            "-c", "copy",
-            "-bsf:a", "aac_adtstoasc",
-            "-movflags", "+faststart",
-            raw_video
-        ]
-        try:
-            subprocess.run(fallback_cmd, check=True)
-        except subprocess.CalledProcessError:
-            print("❌ All conversion methods failed.")
-            if os.path.exists(temp_raw):
-                os.remove(temp_raw)
-            return
+        result = subprocess.run(fix_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        output = result.stdout.decode()
+        if result.returncode != 0:
+            print(f"⚠️ Audio re-encode had issues, trying fallback...")
+            # Fallback: copy everything into MP4
+            fallback_cmd = [
+                "ffmpeg",
+                "-y",
+                "-err_detect", "ignore_err",
+                "-i", temp_raw,
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
+                raw_video
+            ]
+            try:
+                subprocess.run(fallback_cmd, check=True)
+            except subprocess.CalledProcessError:
+                print("❌ All conversion methods failed.")
+                if os.path.exists(temp_raw):
+                    os.remove(temp_raw)
+                return
+    except Exception as e:
+        print(f"❌ Conversion exception: {e}")
+        if os.path.exists(temp_raw):
+            os.remove(temp_raw)
+        return
 
-    # Clean up temp .ts file
+    # Clean up temp mkv file
     if os.path.exists(temp_raw):
         os.remove(temp_raw)
 
@@ -168,7 +181,6 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
 
     print(f"🖼️ Step 2: Applying logo and scrolling text...")
 
-    # Check that inputs exist
     if not os.path.exists(logo_path):
         print(f"❌ Logo not found: {logo_path}")
         if os.path.exists(raw_video):
@@ -216,12 +228,9 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         return
     finally:
         # =========================================================
-        # Step 4: Clean up local files
+        # Step 4: Clean up ALL local files
         # =========================================================
-        if os.path.exists(raw_video):
-            os.remove(raw_video)
-        if os.path.exists(final_video):
-            os.remove(final_video)
-        if os.path.exists(temp_raw):
-            os.remove(temp_raw)
+        for f in [raw_video, final_video, temp_raw]:
+            if os.path.exists(f):
+                os.remove(f)
         print("🧹 Cleaned up local files.")
