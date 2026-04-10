@@ -37,6 +37,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
 
     # Step 1: Download and re-encode the clip
     # Step 1: Download and copy the clip (no re-encode needed, Step 2 handles that)
+        # Step 1: Download and cut the clip
     cut_cmd = [
         "ffmpeg",
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -45,16 +46,19 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "5",
-        "-i", m3u8_url,               # Input FIRST
-        "-ss", start_time,            # Seek AFTER input
+        "-i", m3u8_url,
+        "-ss", start_time,
         "-t", duration,
         "-map", "0:v:0",
         "-map", "0:a:0",
         "-ignore_unknown",
-        "-c:v", "copy",
-        "-c:a", "copy",
-        "-bsf:a", "aac_adtstoasc",
-        "-avoid_negative_ts", "make_zero",   # Fix timestamp issues
+        "-c:v", "copy",                       # Still copy video (fast, no issues)
+        "-c:a", "aac",                         # Re-encode audio (fixes discontinuities)
+        "-ac", "2",                            # Force stereo
+        "-ar", "48000",                        # Force sample rate
+        "-fflags", "+genpts+discardcorrupt",   # Regenerate timestamps, discard corrupt
+        "-avoid_negative_ts", "make_zero",
+        "-max_muxing_queue_size", "2048",
         "-y",
         raw_video
     ]
