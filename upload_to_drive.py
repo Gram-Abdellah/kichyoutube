@@ -8,10 +8,26 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_NAME = 'kick_streaming'
 
 def upload_to_drive(file_path, upload_name=None):
-    # Use token.json from the repo
+    
+    creds = None
+    # Load existing token
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    else:
+
+    # Refresh if expired
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            print("🔄 Token expired, refreshing...")
+            creds.refresh(Request())
+            with open('token.json', 'w') as token_file:
+                token_file.write(creds.to_json())
+            print("✅ Token refreshed successfully!")
+        except Exception as e:
+            print(f"⚠️ Token refresh failed: {e}, re-authenticating...")
+            creds = None
+
+    # If no valid creds, re-authenticate from scratch
+    if not creds or not creds.valid:
         flow = InstalledAppFlow.from_client_secrets_file('kick_downloader_token.json', SCOPES)
         creds = flow.run_local_server(port=0)
         with open('token.json', 'w') as token_file:
