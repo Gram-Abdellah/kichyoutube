@@ -486,16 +486,16 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
                 drawtext_filter = (
                     f"drawtext=fontfile='{font_path}':"
                     f"text='{safe_text}':"
-                    f"fontcolor=#53fc18:fontsize=30:"
-                    f"x=w-mod(t*100\\,text_w*2):y=h-th-20:"
-                    f"box=1:boxcolor=#b31015@1.0:boxborderw=10"
+                    f"fontcolor=#53fc18:fontsize=18:"
+                    f"x=w-mod(t*100\\,text_w*2):y=h-th-10:"
+                    f"box=1:boxcolor=#b31015@1.0:boxborderw=4"
                 )
             else:
                 drawtext_filter = (
                     f"drawtext=text='{safe_text}':"
-                    f"fontcolor=#53fc18:fontsize=30:"
-                    f"x=w-mod(t*100\\,text_w*2):y=h-th-20:"
-                    f"box=1:boxcolor=#b31015@1.0:boxborderw=10"
+                    f"fontcolor=#53fc18:fontsize=18:"
+                    f"x=w-mod(t*100\\,text_w*2):y=h-th-10:"
+                    f"box=1:boxcolor=#b31015@1.0:boxborderw=4"
                 )
 
             if wm_scale:
