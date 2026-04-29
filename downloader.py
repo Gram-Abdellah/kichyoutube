@@ -242,6 +242,8 @@ def download_needed_segments(segments, start_sec, end_sec, output_path, progress
 
 def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo.png", streamer_name="MoroccanStreamer123", font_path="", progress_callback=None):
     try:
+
+        #YOUSSEF
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_ts = f"temp_segments_{timestamp}.ts"
         raw_video = f"raw_kick_clip_{timestamp}.mp4"
