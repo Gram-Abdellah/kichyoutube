@@ -445,129 +445,13 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         print(f"✅ Raw video: {raw_video} ({size_mb:.2f} MB)")
 
         if progress_callback:
-            progress_callback(f"✅ Video converted ({size_mb:.1f} MB). Adding watermark...")
-'''
+            progress_callback(f"✅ Video converted ({size_mb:.1f} MB). Uploading to Drive...")
+
         # =========================================================
-        # Step 2: Add watermark and scrolling text
+        # Watermark step disabled — use raw video as final
         # =========================================================
-        # Dynamic watermark settings — ALWAYS keep 1080p
-        if clip_duration_sec <= 300:
-            wm_timeout = 600
-        elif clip_duration_sec <= 1800:
-            wm_timeout = 1800
-        elif clip_duration_sec <= 7200:
-            wm_timeout = 3600
-        else:
-            wm_timeout = 7200
+        final_video = raw_video
 
-        wm_scale = None          # Never downscale
-        wm_preset = "ultrafast"
-        wm_crf = "18"            # High quality (lower = better, 18 is visually lossless)
-
-        print(f"🖼️ Step 2: Watermark (timeout={wm_timeout}s)...")
-
-        if not os.path.exists(logo_path):
-            print(f"⚠️ Logo not found: {logo_path}, skipping watermark")
-            os.rename(raw_video, final_video)
-        else:
-            if font_path and not os.path.exists(font_path):
-                print(f"⚠️ Font not found: {font_path}, using default")
-                font_path = ""
-
-            overlay_pos = get_overlay_position("top_left")
-
-            base_message = (
-                f"Clip by: {streamer_name} - Follow him on Kick.com and show some support! "
-                f"Catch amazing gameplay, reactions, and stories! "
-                f"Support the Moroccan streaming scene! "
-            )
-            repeat_message = base_message + "     " + base_message
-            safe_text = escape_text_for_drawtext(repeat_message)
-
-            if font_path:
-                drawtext_filter = (
-                    f"drawtext=fontfile='{font_path}':"
-                    f"text='{safe_text}':"
-                    f"fontcolor=#53fc18:fontsize=18:"
-                    f"x=w-mod(t*100\\,text_w*2):y=h-th-10:"
-                    f"box=1:boxcolor=#b31015@1.0:boxborderw=4"
-                )
-            else:
-                drawtext_filter = (
-                    f"drawtext=text='{safe_text}':"
-                    f"fontcolor=#53fc18:fontsize=18:"
-                    f"x=w-mod(t*100\\,text_w*2):y=h-th-10:"
-                    f"box=1:boxcolor=#b31015@1.0:boxborderw=4"
-                )
-
-            if wm_scale:
-                filter_complex = f"[0]{wm_scale}[scaled];[1]scale=120:-1[logo];[scaled][logo]overlay={overlay_pos},{drawtext_filter}"
-            else:
-                filter_complex = f"[1]scale=180:-1[logo];[0][logo]overlay={overlay_pos},{drawtext_filter}"
-
-            watermark_cmd = [
-                "ffmpeg",
-                "-y",
-                "-i", raw_video,
-                "-i", logo_path,
-                "-filter_complex", filter_complex,
-                "-c:v", "libx264",
-                "-preset", wm_preset,
-                "-crf", wm_crf,
-                "-c:a", "copy",
-                "-threads", "2",
-                "-movflags", "+faststart",
-                final_video
-            ]
-
-            try:
-                result = subprocess.run(
-                    watermark_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    timeout=wm_timeout
-                )
-                output = result.stdout.decode()
-
-                if result.returncode != 0:
-                    print(f"⚠️ Watermark failed, uploading without watermark")
-                    print(f"   Error: {output[-500:]}")
-                    if progress_callback:
-                        progress_callback("⚠️ Watermark failed, uploading without it...")
-                    if os.path.exists(final_video):
-                        os.remove(final_video)
-                    os.rename(raw_video, final_video)
-
-            except subprocess.TimeoutExpired:
-                print(f"⚠️ Watermark timed out, uploading without watermark")
-                kill_ffmpeg()
-                if progress_callback:
-                    progress_callback("⚠️ Watermark timed out, uploading without it...")
-                if os.path.exists(final_video):
-                    os.remove(final_video)
-                if os.path.exists(raw_video):
-                    os.rename(raw_video, final_video)
-
-            except Exception as e:
-                print(f"⚠️ Watermark error: {e}, uploading without watermark")
-                if os.path.exists(final_video):
-                    os.remove(final_video)
-                if os.path.exists(raw_video):
-                    os.rename(raw_video, final_video)
-
-        # Clean up raw if still exists
-        if os.path.exists(raw_video) and raw_video != final_video:
-            os.remove(raw_video)
-
-        if not os.path.exists(final_video) or os.path.getsize(final_video) == 0:
-            return "Final video is empty"
-
-        size_mb = os.path.getsize(final_video) / (1024 * 1024)
-        print(f"✅ Final video: {final_video} ({size_mb:.2f} MB)")
-
-        if progress_callback:
-            progress_callback(f"✅ Video ready ({size_mb:.1f} MB). Uploading to Drive...")
-'''
         # =========================================================
         # Step 3: Upload to Google Drive
         # =========================================================
@@ -579,7 +463,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
             traceback.print_exc()
             return f"Google Drive upload failed: {str(e)}"
         finally:
-            cleanup_files([raw_video, final_video, temp_ts])
+            cleanup_files(list({raw_video, final_video, temp_ts}))
             print("🧹 Cleaned up.")
 
         return True
