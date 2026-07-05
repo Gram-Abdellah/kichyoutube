@@ -446,7 +446,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
 
         if progress_callback:
             progress_callback(f"✅ Video converted ({size_mb:.1f} MB). Adding watermark...")
-
+'''
         # =========================================================
         # Step 2: Add watermark and scrolling text
         # =========================================================
@@ -567,7 +567,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
 
         if progress_callback:
             progress_callback(f"✅ Video ready ({size_mb:.1f} MB). Uploading to Drive...")
-
+'''
         # =========================================================
         # Step 3: Upload to Google Drive
         # =========================================================
