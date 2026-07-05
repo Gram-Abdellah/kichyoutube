@@ -445,7 +445,12 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         print(f"✅ Raw video: {raw_video} ({size_mb:.2f} MB)")
 
         if progress_callback:
-            progress_callback(f"✅ Video converted ({size_mb:.1f} MB). Adding watermark...")
+            progress_callback(f"✅ Video converted ({size_mb:.1f} MB). Uploading to Drive...")
+
+        # =========================================================
+        # Watermark step disabled — use raw video as final
+        # =========================================================
+        final_video = raw_video
 
         # =========================================================
         # Step 3: Upload to Google Drive
@@ -458,7 +463,7 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
             traceback.print_exc()
             return f"Google Drive upload failed: {str(e)}"
         finally:
-            cleanup_files([raw_video, final_video, temp_ts])
+            cleanup_files(list({raw_video, final_video, temp_ts}))
             print("🧹 Cleaned up.")
 
         return True
