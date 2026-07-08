@@ -242,10 +242,8 @@ def download_needed_segments(segments, start_sec, end_sec, output_path, progress
 
 def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo.png", streamer_name="MoroccanStreamer123", font_path="", progress_callback=None):
     try:
-
-        #YOUSSEF
+        # YOUSSEF
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        temp_ts = f"temp_segments_{timestamp}.ts"
         raw_video = f"raw_kick_clip_{timestamp}.mp4"
         final_video = f"{streamer_name}_kick_clip_{timestamp}.mp4"
 
@@ -265,60 +263,12 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
             return f"Not enough disk space. Need ~{est_size*3:.0f} MB, have {disk_free} MB."
 
         # =========================================================
-        # Step 1: Parse m3u8 and download segments
+        # Step 1: Download and Extract directly via FFmpeg
         # =========================================================
         if progress_callback:
-            progress_callback("📋 Parsing playlist...")
+            progress_callback(f"📥 Downloading and extracting {seconds_to_hms(int(clip_duration_sec))} clip via FFmpeg...")
+        print("📋 Step 1: Processing m3u8 directly with FFmpeg...")
 
-        print("📋 Step 1: Parsing m3u8 playlist...")
-        try:
-            segments = parse_m3u8_segments(m3u8_url)
-            if not segments:
-                return "No segments found in m3u8 playlist. URL might be invalid or expired."
-            total_duration = segments[-1]['end']
-            print(f"   Found {len(segments)} segments ({seconds_to_hms(int(total_duration))} total)")
-        except Exception as e:
-            traceback.print_exc()
-            return f"Failed to parse m3u8 playlist: {str(e)}"
-
-        if start_sec >= total_duration:
-            return f"Start time {start_time} is beyond stream end ({seconds_to_hms(int(total_duration))})"
-
-        if end_sec > total_duration:
-            print(f"⚠️ Capping end time to {seconds_to_hms(int(total_duration))}")
-            end_sec = total_duration
-            clip_duration_sec = end_sec - start_sec
-
-        if progress_callback:
-            progress_callback(f"📥 Downloading {seconds_to_hms(int(clip_duration_sec))} clip...")
-
-        print(f"📥 Downloading segments...")
-        try:
-            success, trim_start, clip_duration = download_needed_segments(
-                segments, start_sec, end_sec, temp_ts, progress_callback
-            )
-        except Exception as e:
-            traceback.print_exc()
-            cleanup_files([temp_ts])
-            return f"Failed to download segments: {str(e)}"
-
-        if not success:
-            cleanup_files([temp_ts])
-            return "Failed to download segments. Not enough disk space or too many failures."
-
-        if not os.path.exists(temp_ts) or os.path.getsize(temp_ts) == 0:
-            cleanup_files([temp_ts])
-            return "Downloaded segment file is empty."
-
-        size_mb = os.path.getsize(temp_ts) / (1024 * 1024)
-        print(f"✅ Downloaded: {temp_ts} ({size_mb:.2f} MB)")
-
-        if progress_callback:
-            progress_callback(f"✅ Downloaded {size_mb:.1f} MB. Converting to MP4...")
-
-        # =========================================================
-        # Step 1.5: Convert .ts to .mp4 — Method 1: Copy video
-        # =========================================================
         # Dynamic timeout based on clip length
         if clip_duration_sec <= 300:
             convert_timeout = 300
@@ -329,21 +279,20 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         else:
             convert_timeout = 3600
 
-        print(f"🔧 Step 1.5: Converting (copy mode, timeout={convert_timeout}s)...")
+        print(f"🔧 Converting (copy mode, timeout={convert_timeout}s)...")
+        
+        # User-Agent header to prevent 403 Forbidden errors from CDNs
+        ffmpeg_headers = "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n"
 
         convert_cmd = [
-            "ffmpeg",
-            "-y",
+            "ffmpeg", "-y",
+            "-headers", ffmpeg_headers,
             "-err_detect", "ignore_err",
             "-fflags", "+genpts+discardcorrupt",
-            "-i", temp_ts,
-            "-ss", str(trim_start),
-            "-t", str(clip_duration),
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-ac", "2",
-            "-ar", "48000",
-            "-b:a", "128k",
+            "-ss", str(start_sec),         # Fast seek before reading input
+            "-i", m3u8_url,                # Read directly from the URL
+            "-t", str(clip_duration_sec),  # Duration to record
+            "-c", "copy",                  # Copy ALL streams (Video + Audio)
             "-avoid_negative_ts", "make_zero",
             "-max_muxing_queue_size", "4096",
             "-movflags", "+faststart",
@@ -351,12 +300,11 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
         ]
 
         conversion_success = False
-
         try:
             result = subprocess.run(
-                convert_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                convert_cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT, 
                 timeout=convert_timeout
             )
             output = result.stdout.decode()
@@ -367,7 +315,6 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
             else:
                 print(f"⚠️ Copy mode failed (returncode={result.returncode})")
                 print(f"   Output: {output[-500:]}")
-
         except subprocess.TimeoutExpired:
             print(f"⚠️ Copy mode timed out after {convert_timeout}s")
             kill_ffmpeg()
@@ -386,15 +333,14 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
                 os.remove(raw_video)
 
             fallback_timeout = max(convert_timeout * 2, 1800)
-
             fallback_cmd = [
-                "ffmpeg",
-                "-y",
+                "ffmpeg", "-y",
+                "-headers", ffmpeg_headers,
                 "-err_detect", "ignore_err",
                 "-fflags", "+genpts+discardcorrupt",
-                "-i", temp_ts,
-                "-ss", str(trim_start),
-                "-t", str(clip_duration),
+                "-ss", str(start_sec),
+                "-i", m3u8_url,
+                "-t", str(clip_duration_sec),
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-tune", "zerolatency",
@@ -410,12 +356,12 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
                 "-threads", "2",
                 raw_video
             ]
-
+            
             try:
                 result2 = subprocess.run(
-                    fallback_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
+                    fallback_cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT, 
                     timeout=fallback_timeout
                 )
                 output2 = result2.stdout.decode()
@@ -424,19 +370,15 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
                     conversion_success = True
                     print("✅ Fallback 720p conversion successful!")
                 else:
-                    cleanup_files([temp_ts, raw_video])
+                    cleanup_files([raw_video])
                     return f"FFmpeg conversion failed (both methods):\n{output2[-500:]}"
-
             except subprocess.TimeoutExpired:
                 kill_ffmpeg()
-                cleanup_files([temp_ts, raw_video])
+                cleanup_files([raw_video])
                 return f"Conversion timed out ({fallback_timeout//60} min). Try a shorter clip."
             except Exception as e:
-                cleanup_files([temp_ts, raw_video])
+                cleanup_files([raw_video])
                 return f"FFmpeg error: {str(e)}"
-
-        # Clean up temp .ts
-        cleanup_files([temp_ts])
 
         if not os.path.exists(raw_video) or os.path.getsize(raw_video) == 0:
             return "FFmpeg produced an empty video file"
@@ -463,7 +405,8 @@ def cut_and_watermark_kick_video(m3u8_url, start_time, end_time, logo_path="logo
             traceback.print_exc()
             return f"Google Drive upload failed: {str(e)}"
         finally:
-            cleanup_files(list({raw_video, final_video, temp_ts}))
+            # Note: Removed temp_ts from cleanup since we no longer generate it
+            cleanup_files(list({raw_video, final_video}))
             print("🧹 Cleaned up.")
 
         return True
